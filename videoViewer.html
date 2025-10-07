@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -264,13 +264,21 @@
                 <li>Press Stop Recording when done</li>
                 <li>Download the gyro data as JSON</li>
             </ol>
+            <div style="margin-top: 15px; padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid #3b82f6;">
+                <strong>⚠️ Video Format Requirements:</strong>
+                <ul style="margin: 10px 0 0 20px; font-size: 13px; line-height: 1.6;">
+                    <li><strong>Recommended:</strong> MP4 (H.264 codec)</li>
+                    <li>WebM (VP8/VP9 codec) also works well</li>
+                    <li>Avoid HEVC/H.265 (not widely supported in browsers)</li>
+                    <li>If you get a format error, convert your video using a free tool like <a href="https://handbrake.fr/" style="color: #60a5fa;" target="_blank">HandBrake</a> or <a href="https://cloudconvert.com/mov-to-mp4" style="color: #60a5fa;" target="_blank">CloudConvert</a></li>
+                </ul>
+            </div>
             <p style="margin-top: 15px; color: #9ca3af; font-size: 13px;">
                 <strong>Note:</strong> For gyroscope access on iOS, you may need to serve this file over HTTPS. 
                 Use a tool like <code>ngrok</code> or deploy to a hosting service.
             </p>
         </div>
     </div>
-
 
     <script>
         let video, canvas, ctx;
@@ -282,9 +290,18 @@
         let animationId = null;
         let startTime = null;
 
+        // Debug logger
+        function debugLog(message) {
+            const log = document.getElementById('debugLog');
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `<div>[${time}] ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+            console.log(message);
+        }
 
         // Initialize
         window.addEventListener('DOMContentLoaded', () => {
+            debugLog('App initialized');
             video = document.getElementById('videoElement');
             canvas = document.getElementById('videoCanvas');
             ctx = canvas.getContext('2d');
@@ -294,31 +311,36 @@
             requestGyroPermission();
         });
 
-
         async function requestGyroPermission() {
+            debugLog('Checking gyroscope availability...');
             if (typeof DeviceOrientationEvent !== 'undefined' && 
                 typeof DeviceOrientationEvent.requestPermission === 'function') {
                 // iOS 13+ requires permission
+                debugLog('iOS detected - permission required');
                 showWarning('Tap anywhere to enable gyroscope on iOS');
                 document.body.addEventListener('click', async () => {
                     try {
+                        debugLog('Requesting gyroscope permission...');
                         const permission = await DeviceOrientationEvent.requestPermission();
+                        debugLog('Permission result: ' + permission);
                         if (permission === 'granted') {
                             initGyroscope();
                         } else {
                             showError('Gyroscope permission denied');
                         }
                     } catch (e) {
+                        debugLog('Error: ' + e.message);
                         showError('Error requesting gyroscope: ' + e.message);
                     }
                 }, { once: true });
             } else if (window.DeviceOrientationEvent) {
+                debugLog('Gyroscope available (non-iOS)');
                 initGyroscope();
             } else {
+                debugLog('No gyroscope detected');
                 showError('Gyroscope not available on this device');
             }
         }
-
 
         function initGyroscope() {
             hasGyro = true;
@@ -327,17 +349,14 @@
             document.getElementById('orientationContainer').style.display = 'block';
         }
 
-
         function handleOrientation(e) {
             orientation.alpha = e.alpha || 0;
             orientation.beta = e.beta || 0;
             orientation.gamma = e.gamma || 0;
 
-
             document.getElementById('alphaValue').textContent = orientation.alpha.toFixed(1) + '°';
             document.getElementById('betaValue').textContent = orientation.beta.toFixed(1) + '°';
             document.getElementById('gammaValue').textContent = orientation.gamma.toFixed(1) + '°';
-
 
             if (isRecording && video) {
                 const timestamp = (Date.now() - startTime) / 1000;
@@ -355,10 +374,9 @@
             }
         }
 
-
         function handleVideoUpload(e) {
             const file = e.target.files[0];
-            console.log('File selected:', file);
+            debugLog('File selected: ' + (file ? file.name : 'none'));
             
             if (!file) {
                 showError('No file selected');
@@ -366,64 +384,69 @@
             }
             
             if (!file.type.startsWith('video/')) {
+                debugLog('Invalid file type: ' + file.type);
                 showError('Please select a valid video file');
                 return;
             }
             
-            console.log('Loading video:', file.name, file.type, file.size);
+            debugLog('File info: ' + file.name + ', ' + file.type + ', ' + (file.size / 1024 / 1024).toFixed(2) + 'MB');
             
             const url = URL.createObjectURL(file);
+            debugLog('Object URL created: ' + url);
             video.src = url;
             gyroData = [];
             
+            debugLog('Showing video container');
             document.getElementById('videoContainer').style.display = 'block';
             document.getElementById('controlsContainer').style.display = 'block';
             
             video.addEventListener('loadedmetadata', () => {
-                console.log('Video loaded:', video.videoWidth, 'x', video.videoHeight);
+                debugLog('Video metadata loaded: ' + video.videoWidth + 'x' + video.videoHeight + ', duration: ' + video.duration.toFixed(2) + 's');
                 canvas.width = 800;
                 canvas.height = 450;
                 showWarning('Video loaded successfully! Press Play to start.');
             });
             
+            video.addEventListener('loadeddata', () => {
+                debugLog('Video data loaded and ready to play');
+            });
+            
             video.addEventListener('error', (e) => {
-                console.error('Video error:', e);
+                debugLog('Video error event fired');
+                if (video.error) {
+                    debugLog('Error code: ' + video.error.code + ', message: ' + video.error.message);
+                }
                 showError('Error loading video: ' + (video.error ? video.error.message : 'Unknown error'));
             });
+            
+            video.addEventListener('canplay', () => {
+                debugLog('Video can play');
+            });
         }
-
 
         function render360Video() {
             if (!video || video.paused || video.ended) return;
 
-
             const yaw = orientation.alpha * Math.PI / 180;
             const pitch = orientation.beta * Math.PI / 180;
-
 
             const fov = 90;
             const fovRad = fov * Math.PI / 180;
 
-
             const centerX = (yaw / (2 * Math.PI)) * video.videoWidth;
             const centerY = ((pitch + Math.PI / 2) / Math.PI) * video.videoHeight;
-
 
             const sourceWidth = video.videoWidth * (fovRad / (2 * Math.PI));
             const sourceHeight = sourceWidth / (canvas.width / canvas.height);
 
-
             const sx = (centerX - sourceWidth / 2 + video.videoWidth) % video.videoWidth;
             const sy = Math.max(0, Math.min(video.videoHeight - sourceHeight, centerY - sourceHeight / 2));
 
-
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
 
             if (sx + sourceWidth > video.videoWidth) {
                 const firstPartWidth = video.videoWidth - sx;
                 const secondPartWidth = sourceWidth - firstPartWidth;
-
 
                 ctx.drawImage(video, sx, sy, firstPartWidth, sourceHeight,
                     0, 0, (firstPartWidth / sourceWidth) * canvas.width, canvas.height);
@@ -434,10 +457,8 @@
                 ctx.drawImage(video, sx, sy, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
             }
 
-
             animationId = requestAnimationFrame(render360Video);
         }
-
 
         function togglePlayback() {
             if (video.paused) {
@@ -454,7 +475,6 @@
                 }
             }
         }
-
 
         function toggleRecording() {
             const recordBtn = document.getElementById('recordBtn');
@@ -483,7 +503,6 @@
             }
         }
 
-
         function downloadGyroData() {
             const dataStr = JSON.stringify(gyroData, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
@@ -495,20 +514,17 @@
             URL.revokeObjectURL(url);
         }
 
-
         function showError(message) {
             const alert = document.getElementById('errorAlert');
             alert.textContent = message;
             alert.style.display = 'block';
         }
 
-
         function showWarning(message) {
             const alert = document.getElementById('warningAlert');
             alert.textContent = message;
             alert.style.display = 'block';
         }
-
 
         function hideWarning() {
             document.getElementById('warningAlert').style.display = 'none';
