@@ -1,0 +1,518 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360° Video Reframing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .upload-btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background: #3b82f6;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .upload-btn:hover {
+            background: #2563eb;
+        }
+        
+        #videoCanvas {
+            width: 100%;
+            border-radius: 8px;
+            background: black;
+            display: block;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-play {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-play:hover {
+            background: #2563eb;
+        }
+        
+        .btn-record {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-record:hover {
+            background: #059669;
+        }
+        
+        .btn-record.recording {
+            background: #ef4444;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .btn-download {
+            background: #8b5cf6;
+            color: white;
+            width: 100%;
+            justify-content: center;
+        }
+        
+        .btn-download:hover {
+            background: #7c3aed;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .orientation-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            text-align: center;
+        }
+        
+        .orientation-item {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+        
+        .orientation-label {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 5px;
+        }
+        
+        .orientation-value {
+            font-size: 24px;
+            font-family: monospace;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        
+        .status.recording {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.2);
+            border: 1px solid #f59e0b;
+        }
+        
+        .alert-error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid #ef4444;
+        }
+        
+        .instructions {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+            color: #d1d5db;
+        }
+        
+        #videoElement {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            📹 360° Video Reframing
+        </h1>
+        
+        <div id="errorAlert" class="alert alert-error" style="display: none;"></div>
+        <div id="warningAlert" class="alert alert-warning" style="display: none;"></div>
+        
+        <div class="card">
+            <input type="file" id="videoInput" accept="video/*" style="display: none;">
+            <button class="upload-btn" onclick="document.getElementById('videoInput').click()">
+                📤 Upload 360° Video
+            </button>
+        </div>
+        
+        <div id="videoContainer" class="card" style="display: none;">
+            <canvas id="videoCanvas" width="800" height="450"></canvas>
+            <video id="videoElement" loop></video>
+        </div>
+        
+        <div id="controlsContainer" class="card" style="display: none;">
+            <div class="controls">
+                <button id="playBtn" class="btn-play" onclick="togglePlayback()">
+                    ▶️ Play
+                </button>
+                <button id="recordBtn" class="btn-record" onclick="toggleRecording()">
+                    ⏺️ Start Recording
+                </button>
+            </div>
+            <button id="downloadBtn" class="btn-download" onclick="downloadGyroData()" style="display: none; margin-top: 15px;">
+                💾 Download Gyro Data (<span id="dataCount">0</span> points)
+            </button>
+        </div>
+        
+        <div id="orientationContainer" class="card" style="display: none;">
+            <h2 style="margin-bottom: 15px; font-size: 1.3em;">Device Orientation</h2>
+            <div class="orientation-grid">
+                <div class="orientation-item">
+                    <div class="orientation-label">Alpha (Z)</div>
+                    <div class="orientation-value" id="alphaValue">0.0°</div>
+                </div>
+                <div class="orientation-item">
+                    <div class="orientation-label">Beta (X)</div>
+                    <div class="orientation-value" id="betaValue">0.0°</div>
+                </div>
+                <div class="orientation-item">
+                    <div class="orientation-label">Gamma (Y)</div>
+                    <div class="orientation-value" id="gammaValue">0.0°</div>
+                </div>
+            </div>
+            <div id="recordingStatus" class="status" style="display: none;"></div>
+        </div>
+        
+        <div id="debugPanel" class="card" style="background: rgba(0,0,0,0.3); font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;">
+            <h3 style="margin-bottom: 10px;">Debug Log</h3>
+            <div id="debugLog"></div>
+        </div>
+        
+        <div class="card instructions">
+            <h2 style="margin-bottom: 10px; font-size: 1.3em;">Instructions</h2>
+            <ol>
+                <li>Upload a 360° equirectangular video</li>
+                <li>Grant gyroscope permissions when prompted</li>
+                <li>Press Play to start the video</li>
+                <li>Press Start Recording to capture gyro data</li>
+                <li>Move your phone to reframe the 360° video</li>
+                <li>Press Stop Recording when done</li>
+                <li>Download the gyro data as JSON</li>
+            </ol>
+            <p style="margin-top: 15px; color: #9ca3af; font-size: 13px;">
+                <strong>Note:</strong> For gyroscope access on iOS, you may need to serve this file over HTTPS. 
+                Use a tool like <code>ngrok</code> or deploy to a hosting service.
+            </p>
+        </div>
+    </div>
+
+
+    <script>
+        let video, canvas, ctx;
+        let isPlaying = false;
+        let isRecording = false;
+        let gyroData = [];
+        let orientation = { alpha: 0, beta: 0, gamma: 0 };
+        let hasGyro = false;
+        let animationId = null;
+        let startTime = null;
+
+
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            video = document.getElementById('videoElement');
+            canvas = document.getElementById('videoCanvas');
+            ctx = canvas.getContext('2d');
+            
+            document.getElementById('videoInput').addEventListener('change', handleVideoUpload);
+            
+            requestGyroPermission();
+        });
+
+
+        async function requestGyroPermission() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // iOS 13+ requires permission
+                showWarning('Tap anywhere to enable gyroscope on iOS');
+                document.body.addEventListener('click', async () => {
+                    try {
+                        const permission = await DeviceOrientationEvent.requestPermission();
+                        if (permission === 'granted') {
+                            initGyroscope();
+                        } else {
+                            showError('Gyroscope permission denied');
+                        }
+                    } catch (e) {
+                        showError('Error requesting gyroscope: ' + e.message);
+                    }
+                }, { once: true });
+            } else if (window.DeviceOrientationEvent) {
+                initGyroscope();
+            } else {
+                showError('Gyroscope not available on this device');
+            }
+        }
+
+
+        function initGyroscope() {
+            hasGyro = true;
+            hideWarning();
+            window.addEventListener('deviceorientation', handleOrientation);
+            document.getElementById('orientationContainer').style.display = 'block';
+        }
+
+
+        function handleOrientation(e) {
+            orientation.alpha = e.alpha || 0;
+            orientation.beta = e.beta || 0;
+            orientation.gamma = e.gamma || 0;
+
+
+            document.getElementById('alphaValue').textContent = orientation.alpha.toFixed(1) + '°';
+            document.getElementById('betaValue').textContent = orientation.beta.toFixed(1) + '°';
+            document.getElementById('gammaValue').textContent = orientation.gamma.toFixed(1) + '°';
+
+
+            if (isRecording && video) {
+                const timestamp = (Date.now() - startTime) / 1000;
+                gyroData.push({
+                    time: timestamp,
+                    videoTime: video.currentTime,
+                    alpha: orientation.alpha,
+                    beta: orientation.beta,
+                    gamma: orientation.gamma
+                });
+                
+                document.getElementById('dataCount').textContent = gyroData.length;
+                document.getElementById('recordingStatus').textContent = 
+                    `Recording: ${gyroData.length} data points captured`;
+            }
+        }
+
+
+        function handleVideoUpload(e) {
+            const file = e.target.files[0];
+            console.log('File selected:', file);
+            
+            if (!file) {
+                showError('No file selected');
+                return;
+            }
+            
+            if (!file.type.startsWith('video/')) {
+                showError('Please select a valid video file');
+                return;
+            }
+            
+            console.log('Loading video:', file.name, file.type, file.size);
+            
+            const url = URL.createObjectURL(file);
+            video.src = url;
+            gyroData = [];
+            
+            document.getElementById('videoContainer').style.display = 'block';
+            document.getElementById('controlsContainer').style.display = 'block';
+            
+            video.addEventListener('loadedmetadata', () => {
+                console.log('Video loaded:', video.videoWidth, 'x', video.videoHeight);
+                canvas.width = 800;
+                canvas.height = 450;
+                showWarning('Video loaded successfully! Press Play to start.');
+            });
+            
+            video.addEventListener('error', (e) => {
+                console.error('Video error:', e);
+                showError('Error loading video: ' + (video.error ? video.error.message : 'Unknown error'));
+            });
+        }
+
+
+        function render360Video() {
+            if (!video || video.paused || video.ended) return;
+
+
+            const yaw = orientation.alpha * Math.PI / 180;
+            const pitch = orientation.beta * Math.PI / 180;
+
+
+            const fov = 90;
+            const fovRad = fov * Math.PI / 180;
+
+
+            const centerX = (yaw / (2 * Math.PI)) * video.videoWidth;
+            const centerY = ((pitch + Math.PI / 2) / Math.PI) * video.videoHeight;
+
+
+            const sourceWidth = video.videoWidth * (fovRad / (2 * Math.PI));
+            const sourceHeight = sourceWidth / (canvas.width / canvas.height);
+
+
+            const sx = (centerX - sourceWidth / 2 + video.videoWidth) % video.videoWidth;
+            const sy = Math.max(0, Math.min(video.videoHeight - sourceHeight, centerY - sourceHeight / 2));
+
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+
+            if (sx + sourceWidth > video.videoWidth) {
+                const firstPartWidth = video.videoWidth - sx;
+                const secondPartWidth = sourceWidth - firstPartWidth;
+
+
+                ctx.drawImage(video, sx, sy, firstPartWidth, sourceHeight,
+                    0, 0, (firstPartWidth / sourceWidth) * canvas.width, canvas.height);
+                ctx.drawImage(video, 0, sy, secondPartWidth, sourceHeight,
+                    (firstPartWidth / sourceWidth) * canvas.width, 0,
+                    (secondPartWidth / sourceWidth) * canvas.width, canvas.height);
+            } else {
+                ctx.drawImage(video, sx, sy, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+            }
+
+
+            animationId = requestAnimationFrame(render360Video);
+        }
+
+
+        function togglePlayback() {
+            if (video.paused) {
+                video.play();
+                isPlaying = true;
+                document.getElementById('playBtn').innerHTML = '⏸️ Pause';
+                render360Video();
+            } else {
+                video.pause();
+                isPlaying = false;
+                document.getElementById('playBtn').innerHTML = '▶️ Play';
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+            }
+        }
+
+
+        function toggleRecording() {
+            const recordBtn = document.getElementById('recordBtn');
+            const recordingStatus = document.getElementById('recordingStatus');
+            
+            if (!isRecording) {
+                startTime = Date.now();
+                gyroData = [];
+                isRecording = true;
+                recordBtn.innerHTML = '⏹️ Stop Recording';
+                recordBtn.classList.add('recording');
+                recordingStatus.style.display = 'block';
+                recordingStatus.classList.add('recording');
+                document.getElementById('downloadBtn').style.display = 'none';
+                
+                if (!isPlaying) togglePlayback();
+            } else {
+                isRecording = false;
+                recordBtn.innerHTML = '⏺️ Start Recording';
+                recordBtn.classList.remove('recording');
+                recordingStatus.style.display = 'none';
+                
+                if (gyroData.length > 0) {
+                    document.getElementById('downloadBtn').style.display = 'block';
+                }
+            }
+        }
+
+
+        function downloadGyroData() {
+            const dataStr = JSON.stringify(gyroData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gyro-data-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+
+        function showError(message) {
+            const alert = document.getElementById('errorAlert');
+            alert.textContent = message;
+            alert.style.display = 'block';
+        }
+
+
+        function showWarning(message) {
+            const alert = document.getElementById('warningAlert');
+            alert.textContent = message;
+            alert.style.display = 'block';
+        }
+
+
+        function hideWarning() {
+            document.getElementById('warningAlert').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
