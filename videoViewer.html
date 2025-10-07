@@ -413,19 +413,55 @@
             
             video.addEventListener('error', (e) => {
                 debugLog('Video error event fired');
+                let errorMsg = 'Unknown error';
+                
                 if (video.error) {
-                    debugLog('Error code: ' + video.error.code + ', message: ' + video.error.message);
+                    debugLog('Error code: ' + video.error.code);
+                    
+                    switch(video.error.code) {
+                        case 1:
+                            errorMsg = 'MEDIA_ERR_ABORTED: Video loading aborted';
+                            break;
+                        case 2:
+                            errorMsg = 'MEDIA_ERR_NETWORK: Network error while loading video';
+                            break;
+                        case 3:
+                            errorMsg = 'MEDIA_ERR_DECODE: Video decoding error';
+                            break;
+                        case 4:
+                            errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED: Video format not supported by browser';
+                            break;
+                    }
+                    
+                    debugLog(errorMsg);
                 }
-                showError('Error loading video: ' + (video.error ? video.error.message : 'Unknown error'));
+                
+                showError('Error loading video: ' + errorMsg + '. Try converting to MP4 (H.264) format.');
             });
             
             video.addEventListener('canplay', () => {
-                debugLog('Video can play');
+                debugLog('Video can play - testing canvas draw...');
+                // Test draw to see if video renders at all
+                setTimeout(() => {
+                    if (video.videoWidth > 0) {
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        debugLog('Test frame drawn to canvas');
+                    }
+                }, 100);
             });
         }
 
         function render360Video() {
-            if (!video || video.paused || video.ended) return;
+            if (!video || video.paused || video.ended) {
+                debugLog('Render stopped: video paused or ended');
+                return;
+            }
+
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+                debugLog('Video dimensions not ready yet');
+                animationId = requestAnimationFrame(render360Video);
+                return;
+            }
 
             const yaw = orientation.alpha * Math.PI / 180;
             const pitch = orientation.beta * Math.PI / 180;
@@ -444,17 +480,21 @@
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            if (sx + sourceWidth > video.videoWidth) {
-                const firstPartWidth = video.videoWidth - sx;
-                const secondPartWidth = sourceWidth - firstPartWidth;
+            try {
+                if (sx + sourceWidth > video.videoWidth) {
+                    const firstPartWidth = video.videoWidth - sx;
+                    const secondPartWidth = sourceWidth - firstPartWidth;
 
-                ctx.drawImage(video, sx, sy, firstPartWidth, sourceHeight,
-                    0, 0, (firstPartWidth / sourceWidth) * canvas.width, canvas.height);
-                ctx.drawImage(video, 0, sy, secondPartWidth, sourceHeight,
-                    (firstPartWidth / sourceWidth) * canvas.width, 0,
-                    (secondPartWidth / sourceWidth) * canvas.width, canvas.height);
-            } else {
-                ctx.drawImage(video, sx, sy, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(video, sx, sy, firstPartWidth, sourceHeight,
+                        0, 0, (firstPartWidth / sourceWidth) * canvas.width, canvas.height);
+                    ctx.drawImage(video, 0, sy, secondPartWidth, sourceHeight,
+                        (firstPartWidth / sourceWidth) * canvas.width, 0,
+                        (secondPartWidth / sourceWidth) * canvas.width, canvas.height);
+                } else {
+                    ctx.drawImage(video, sx, sy, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+                }
+            } catch (e) {
+                debugLog('Render error: ' + e.message);
             }
 
             animationId = requestAnimationFrame(render360Video);
@@ -462,11 +502,18 @@
 
         function togglePlayback() {
             if (video.paused) {
-                video.play();
-                isPlaying = true;
-                document.getElementById('playBtn').innerHTML = '⏸️ Pause';
-                render360Video();
+                debugLog('Starting playback...');
+                video.play().then(() => {
+                    debugLog('Video playing successfully');
+                    isPlaying = true;
+                    document.getElementById('playBtn').innerHTML = '⏸️ Pause';
+                    render360Video();
+                }).catch(e => {
+                    debugLog('Play error: ' + e.message);
+                    showError('Cannot play video: ' + e.message);
+                });
             } else {
+                debugLog('Pausing playback');
                 video.pause();
                 isPlaying = false;
                 document.getElementById('playBtn').innerHTML = '▶️ Play';
