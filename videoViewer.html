@@ -391,25 +391,49 @@
             
             debugLog('File info: ' + file.name + ', ' + file.type + ', ' + (file.size / 1024 / 1024).toFixed(2) + 'MB');
             
+            // Clear any previous video
+            if (video.src) {
+                URL.revokeObjectURL(video.src);
+            }
+            
             const url = URL.createObjectURL(file);
             debugLog('Object URL created: ' + url);
+            
+            // Reset video element
+            video.load();
             video.src = url;
+            video.preload = 'auto';
             gyroData = [];
             
             debugLog('Showing video container');
             document.getElementById('videoContainer').style.display = 'block';
             document.getElementById('controlsContainer').style.display = 'block';
             
+            video.addEventListener('loadstart', () => {
+                debugLog('Video load started');
+            }, { once: true });
+            
+            video.addEventListener('progress', () => {
+                debugLog('Video loading progress...');
+            }, { once: true });
+            
             video.addEventListener('loadedmetadata', () => {
                 debugLog('Video metadata loaded: ' + video.videoWidth + 'x' + video.videoHeight + ', duration: ' + video.duration.toFixed(2) + 's');
                 canvas.width = 800;
                 canvas.height = 450;
+                
+                if (video.videoWidth === 0 || video.videoHeight === 0) {
+                    debugLog('WARNING: Video dimensions are 0');
+                    showError('Video has invalid dimensions');
+                    return;
+                }
+                
                 showWarning('Video loaded successfully! Press Play to start.');
-            });
+            }, { once: true });
             
             video.addEventListener('loadeddata', () => {
                 debugLog('Video data loaded and ready to play');
-            });
+            }, { once: true });
             
             video.addEventListener('error', (e) => {
                 debugLog('Video error event fired');
@@ -426,7 +450,7 @@
                             errorMsg = 'MEDIA_ERR_NETWORK: Network error while loading video';
                             break;
                         case 3:
-                            errorMsg = 'MEDIA_ERR_DECODE: Video decoding error';
+                            errorMsg = 'MEDIA_ERR_DECODE: Video decoding error - file may be corrupted or use unsupported codec';
                             break;
                         case 4:
                             errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED: Video format not supported by browser';
@@ -436,19 +460,23 @@
                     debugLog(errorMsg);
                 }
                 
-                showError('Error loading video: ' + errorMsg + '. Try converting to MP4 (H.264) format.');
-            });
+                showError(errorMsg + '. Try re-converting the video with different settings (MP4, H.264, baseline profile).');
+            }, { once: true });
             
             video.addEventListener('canplay', () => {
                 debugLog('Video can play - testing canvas draw...');
                 // Test draw to see if video renders at all
                 setTimeout(() => {
                     if (video.videoWidth > 0) {
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        debugLog('Test frame drawn to canvas');
+                        try {
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            debugLog('Test frame drawn to canvas successfully!');
+                        } catch (err) {
+                            debugLog('Failed to draw test frame: ' + err.message);
+                        }
                     }
                 }, 100);
-            });
+            }, { once: true });
         }
 
         function render360Video() {
